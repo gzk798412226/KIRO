@@ -1,11 +1,33 @@
 from tsp import *
+import multiprocessing as mp
+import json
+import os
+from datetime import datetime
+import matplotlib
+matplotlib.use('Agg')  # Set backend to non-interactive
+import matplotlib.pyplot as plt
+
+def run_algorithm(args):
+    name, func, G, coords, init_tour, params, start_node = args
+    if name == "Genetic Algorithms":
+        best, _, hist = func(G, **params, start=start_node)
+    elif name == "AR-ACO":
+        best, _, hist = func(G, coords, init_tour, **params, start=start_node)
+    elif name == "Smooth ACO":
+        best, _, hist = func(G, coords, init_tour, **params, start=start_node)
+    else:
+        best, _, hist = func(G, init_tour, **params, start=start_node)
+    routes = split_tour_among_robots(best, num_robots, start=start_node)
+    total = sum(tour_length(G, r) for r in routes)
+    maximum = max(tour_length(G, r) for r in routes)
+    return name, routes, total, maximum, hist
 
 if __name__ == "__main__":
     # 参数句柄
     params = {
         "christofides_ACO": {
             "num_ants": 10,
-            "num_iterations": 50,
+            "num_iterations": 10,
             "alpha": 1.0,
             "beta": 3.0,
             "evaporation_rate": 0.3,
@@ -13,7 +35,7 @@ if __name__ == "__main__":
         },
         "pure_ACO": {
             "num_ants": 10,
-            "num_iterations": 50,
+            "num_iterations": 10,
             "alpha": 1.0,
             "beta": 3.0,
             "evaporation_rate": 0.3,
@@ -39,115 +61,79 @@ if __name__ == "__main__":
     G, coords = create_random_graph(200, pattern="uniform", seed=505)
     G, coords = add_start_node(G, coords, start_coords, start=start_node)
     
-    # 1. Christofides + ACO
+    # 准备算法参数
     init_tour_christofides = christofides_tsp(G, start=start_node)
-    best_ca, _, hist_ca = ant_colony_tsp(
-        G, init_tour_christofides,
-        **params["christofides_ACO"], start=start_node
-    )
-    routes_ca = split_tour_among_robots(best_ca, num_robots, start=start_node)
-    
-    # 2. 纯 ACO
     random_init = random_tour(G, start=start_node)
-    best_aco, _, hist_aco = ant_colony_tsp(
-        G, random_init,
-        **params["pure_ACO"], start=start_node
-    )
-    routes_aco = split_tour_among_robots(best_aco, num_robots, start=start_node)
     
-    # 3. 模拟退火
-    sa_init = random_tour(G, start=start_node)
-    best_sa, _, hist_sa = simulated_annealing_tsp(
-        G, sa_init,
-        **params["SA"], start=start_node
-    )
-    routes_sa = split_tour_among_robots(best_sa, num_robots, start=start_node)
+    # 定义要运行的算法
+    algorithms_to_run = [
+        ("MST+ACO", ant_colony_tsp, G, coords, init_tour_christofides, params["christofides_ACO"], start_node),
+        ("ACO", ant_colony_tsp, G, coords, random_init, params["pure_ACO"], start_node),
+        ("Simulated Annealing", simulated_annealing_tsp, G, coords, random_init, params["SA"], start_node),
+        ("Genetic Algorithms", genetic_algorithm_tsp, G, coords, None, {
+            "population_size": params["GA"]["population_size"],
+            "generations": params["GA"]["generations"],
+            "mutation_rate": params["GA"]["mutation_rate"]
+        }, start_node),
+        ("AR-ACO", ant_colony_AR_ACO_tsp, G, coords, random_init, 
+         {"num_ants": 20, "num_iterations": 100, "alpha": 1.0, "beta": 3.0, 
+          "evaporation_rate": 0.3, "Q": 100, "k": 200}, start_node),
+        ("IEACO", ant_colony_IEACO_tsp, G, coords, random_init,
+         {"num_ants": 10, "num_iterations": 100, "alpha_init": 1.0, "beta_init": 3.0,
+          "evaporation_rate": 0.3, "Q": 100, "epsilon": 0.2}, start_node),
+        ("DL-ACO", ant_colony_DL_ACO_tsp, G, coords, random_init,
+         {"num_ants_layer1": 5, "iters_layer1": 50, "num_ants_layer2": 5, "iters_layer2": 50,
+          "alpha": 1.0, "beta": 3.0, "evaporation_rate": 0.3, "Q": 100}, start_node),
+        ("Smooth ACO", ant_colony_smooth_tsp, G, coords, random_init,
+         {"num_ants": 10, "num_iterations": 100, "alpha": 1.0, "beta": 3.0,
+          "evaporation_rate": 0.3, "Q": 100, "angle_penalty": 2.0}, start_node)
+    ]
     
-    # 4. 遗传算法
-    best_ga, _, hist_ga = genetic_algorithm_tsp(
-        G,
-        population_size=params["GA"]["population_size"],
-        generations=params["GA"]["generations"],
-        mutation_rate=params["GA"]["mutation_rate"],
-        start=start_node
-    )
-    routes_ga = split_tour_among_robots(best_ga, num_robots, start=start_node)
+    # 使用多进程运行算法
+    with mp.Pool(processes=mp.cpu_count()) as pool:
+        results = pool.map(run_algorithm, algorithms_to_run)
     
-    # 5. AR-ACO
-    best_ar, _, hist_ar = ant_colony_AR_ACO_tsp(
-        G, coords, random_init,
-        num_ants=20, num_iterations=100,
-        alpha=1.0, beta=3.0,
-        evaporation_rate=0.3, Q=100,
-        start=start_node, k=200
-    )
-    routes_ar = split_tour_among_robots(best_ar, num_robots, start=start_node)
+    # 创建结果目录
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    results_dir = f"results_{timestamp}"
+    os.makedirs(results_dir, exist_ok=True)
     
-    # 6. IEACO
-    best_ie, _, hist_ie = ant_colony_IEACO_tsp(
-        G, random_init,
-        num_ants=10, num_iterations=100,
-        alpha_init=1.0, beta_init=3.0,
-        evaporation_rate=0.3, Q=100,
-        epsilon=0.2, start=start_node
-    )
-    routes_ie = split_tour_among_robots(best_ie, num_robots, start=start_node)
+    # 保存结果到JSON
+    results_dict = {}
+    for name, routes, total, maximum, hist in results:
+        results_dict[name] = {
+            "total_path_length": total,
+            "maximum_single_robot_path": maximum,
+            "history": hist.tolist() if hasattr(hist, 'tolist') else hist
+        }
     
-    # 7. DL-ACO
-    best_dl, _, hist_dl = ant_colony_DL_ACO_tsp(
-        G, random_init,
-        num_ants_layer1=5, iters_layer1=50,
-        num_ants_layer2=5, iters_layer2=50,
-        alpha=1.0, beta=3.0,
-        evaporation_rate=0.3, Q=100,
-        start=start_node
-    )
-    routes_dl = split_tour_among_robots(best_dl, num_robots, start=start_node)
+    with open(os.path.join(results_dir, "results.json"), "w") as f:
+        json.dump(results_dict, f, indent=4)
     
-    # 8. 平滑ACO
-    best_sm, _, hist_sm = ant_colony_smooth_tsp(
-        G, coords, random_init,
-        num_ants=10, num_iterations=100,
-        alpha=1.0, beta=3.0,
-        evaporation_rate=0.3, Q=100,
-        start=start_node, angle_penalty=2.0
-    )
-    routes_sm = split_tour_among_robots(best_sm, num_robots, start=start_node)
+    # 保存路径图
+    for name, routes, _, _, _ in results:
+        plt.figure(figsize=(10, 10))
+        plot_multi_robot_routes(coords, routes, f"multi robot - {name}")
+        plt.savefig(os.path.join(results_dir, f"{name}_routes.png"))
+        plt.close()
     
-
-# 汇总打印
-algorithms = [
-    ("MST+ACO", routes_ca),
-    ("ACO", routes_aco),
-    ("Simulated Annealing", routes_sa),
-    ("Genetic Algorithms", routes_ga),
-    ("AR-ACO", routes_ar),
-    ("IEACO", routes_ie),
-    ("DL-ACO", routes_dl),
-    ("Smooth ACO", routes_sm),
-]
-print("\n===== 各算法路径汇总 =====")
-summary = []
-for name, routes in algorithms:
-    total = sum(tour_length(G, r) for r in routes)
-    maximum = max(tour_length(G, r) for r in routes)
-    print(f"{name:15} Total path length：{total:.2f}，Maximum single-machine path：{maximum:.2f}")
-    summary.append((name, total, maximum))
-
-# 静态路径图
-for name, routes in algorithms:
-    plot_multi_robot_routes(coords, routes, f"multi robot - {name}")
-
-# 综合条形图对比
-import matplotlib.pyplot as plt
-names, totals, maxes = zip(*summary)
-x = range(len(names))
-plt.figure(figsize=(10,5))
-plt.bar(x, totals, width=0.4, label="Total path", align="center")
-plt.bar([i+0.4 for i in x], maxes, width=0.4, label="Maximum single-robot", align="center")
-plt.xticks([i+0.2 for i in x], names, rotation=45, ha="right")
-plt.ylabel("Path Length")
-plt.title("Comparison of path lengths of various algorithms")
-plt.legend()
-plt.tight_layout()
-plt.show()
+    # 保存综合对比图
+    names, totals, maxes = zip(*[(name, total, maximum) for name, _, total, maximum, _ in results])
+    x = range(len(names))
+    plt.figure(figsize=(10,5))
+    plt.bar(x, totals, width=0.4, label="Total path", align="center")
+    plt.bar([i+0.4 for i in x], maxes, width=0.4, label="Maximum single-robot", align="center")
+    plt.xticks([i+0.2 for i in x], names, rotation=45, ha="right")
+    plt.ylabel("Path Length")
+    plt.title("Comparison of path lengths of various algorithms")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(results_dir, "comparison.png"))
+    plt.close()
+    
+    # 打印汇总结果
+    print("\n===== 各算法路径汇总 =====")
+    for name, _, total, maximum, _ in results:
+        print(f"{name:15} Total path length：{total:.2f}，Maximum single-machine path：{maximum:.2f}")
+    
+    print(f"\n结果已保存到目录: {results_dir}")
