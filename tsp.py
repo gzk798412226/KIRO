@@ -572,7 +572,7 @@ def create_random_graph(n, pattern="clusters", seed=42):
 # -------------------------------
 # 绘制多机器人路径（折线图），用星号标记起点
 # -------------------------------
-def plot_multi_robot_routes(coords, routes, title="Multi-Robot Routes"):
+def plot_multi_robot_routes(coords, routes, title="Multi-Robot Routes", save_path=None):
     plt.figure(figsize=(8,6))
     colors = ['r', 'g', 'b', 'orange', 'purple', 'cyan']
     for i, route in enumerate(routes):
@@ -585,7 +585,11 @@ def plot_multi_robot_routes(coords, routes, title="Multi-Robot Routes"):
     plt.ylabel("Y")
     plt.legend()
     plt.grid(True)
-    plt.show()
+    if save_path:
+        plt.savefig(save_path)
+        plt.close()
+    else:
+        plt.show()
 
 # -------------------------------
 # 动画函数：展示每次迭代时的多机器人路径
