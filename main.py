@@ -15,6 +15,9 @@ def run_algorithm(args):
         best, _, hist = func(G, coords, init_tour, **params, start=start_node)
     elif name == "Smooth ACO":
         best, _, hist = func(G, coords, init_tour, **params, start=start_node)
+    elif name == "MST+AR-ACO":
+        print(f"Calling {name} with args: G={G}, coords={coords is not None}, init_tour={init_tour is not None}, params keys={params.keys()}, start_node={start_node}")
+        best, _, hist = func(graph=G, coords=coords, init_tour=init_tour, start=start_node, **params)
     else:
         best, _, hist = func(G, init_tour, **params, start=start_node)
     routes = split_tour_among_robots(best, num_robots, start=start_node)
@@ -77,6 +80,9 @@ if __name__ == "__main__":
         }, start_node),
         ("AR-ACO", ant_colony_AR_ACO_tsp, G, coords, random_init, 
          {"num_ants": 20, "num_iterations": 100, "alpha": 1.0, "beta": 3.0, 
+          "evaporation_rate": 0.3, "Q": 100, "k": 200}, start_node),
+        ("MST+AR-ACO", ant_colony_MST_AR_ACO_tsp, G, coords, init_tour_christofides,
+         {"num_ants": 20, "num_iterations": 100, "alpha": 1.0, "beta": 3.0,
           "evaporation_rate": 0.3, "Q": 100, "k": 200}, start_node),
         ("IEACO", ant_colony_IEACO_tsp, G, coords, random_init,
          {"num_ants": 10, "num_iterations": 100, "alpha_init": 1.0, "beta_init": 3.0,

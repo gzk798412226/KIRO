@@ -671,3 +671,60 @@ def plot_history_line_chart(robot_history, total_history, algorithm_name):
     plt.legend()
     plt.grid(True)
     plt.show()
+
+# -------------------------------
+# 5. MST+AR-ACO 算法（结合MST+ACO和AR-ACO的优点）
+# -------------------------------
+def ant_colony_MST_AR_ACO_tsp(graph, coords, init_tour,
+                             num_ants, num_iterations,
+                             alpha, beta, evaporation_rate, Q,
+                             start="start", k=100):
+    """
+    结合MST+ACO和AR-ACO的优点：
+    1. 使用Christofides算法生成初始解
+    2. 使用斥力场来引导蚂蚁远离起点
+    3. 使用ACO进行优化
+    """
+    nodes = list(graph.nodes())
+    # 初始化信息素
+    pheromone = {(u,v):1.0 for u,v,_ in graph.edges(data=True)}
+    pheromone.update({(v,u):1.0 for u,v,_ in graph.edges(data=True)})
+    
+    # 计算斥力场
+    repulsive = compute_repulsive_field(coords, start, k)
+
+    # 使用Christofides算法生成初始解
+    if init_tour is None:
+        init_tour = christofides_tsp(graph, start=start)
+    
+    best_tour = init_tour[:]
+    best_len = tour_length(graph, best_tour)
+    history = [best_tour.copy()]
+
+    for it in range(num_iterations):
+        all_tours, all_lens = [], []
+        for _ in range(num_ants):
+            # 使用带斥力场的路径构建
+            tour = construct_tour_AR(graph, nodes, pheromone, alpha, beta, repulsive, start)
+            L = tour_length(graph, tour)
+            all_tours.append(tour)
+            all_lens.append(L)
+            if L < best_len:
+                best_len = L
+                best_tour = tour.copy()
+        
+        # 信息素挥发
+        for key in pheromone:
+            pheromone[key] *= (1 - evaporation_rate)
+        
+        # 信息素更新
+        for tour, L in zip(all_tours, all_lens):
+            d = Q / L
+            for i in range(len(tour)-1):
+                u, v = tour[i], tour[i+1]
+                pheromone[(u,v)] += d
+                pheromone[(v,u)] += d
+        
+        history.append(best_tour.copy())
+
+    return best_tour, best_len, history
