@@ -6,6 +6,21 @@ from datetime import datetime
 import matplotlib
 matplotlib.use('Agg')  # Set backend to non-interactive
 import matplotlib.pyplot as plt
+import argparse
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='TSP Algorithm Comparison Experiment')
+    parser.add_argument('--seed', type=int, default=505,
+                      help='Random seed for graph generation (default: 505)')
+    parser.add_argument('--num_cities', type=int, default=200,
+                      help='Number of cities in the graph (default: 200)')
+    parser.add_argument('--start_x', type=int, default=50,
+                      help='X coordinate of start point (default: 50)')
+    parser.add_argument('--start_y', type=int, default=50,
+                      help='Y coordinate of start point (default: 50)')
+    parser.add_argument('--num_robots', type=int, default=4,
+                      help='Number of robots (default: 4)')
+    return parser.parse_args()
 
 def run_algorithm(args):
     name, func, G, coords, init_tour, params, start_node = args
@@ -26,6 +41,9 @@ def run_algorithm(args):
     return name, routes, total, maximum, hist
 
 if __name__ == "__main__":
+    # Parse command line arguments
+    args = parse_args()
+    
     # 参数句柄
     params = {
         "christofides_ACO": {
@@ -56,12 +74,12 @@ if __name__ == "__main__":
         }
     }
     
-    num_robots = 4
-    start_coords = (50, 50)
+    num_robots = args.num_robots
+    start_coords = (args.start_x, args.start_y)
     start_node = "start"
     
     # 生成图
-    G, coords = create_random_graph(200, pattern="uniform", seed=505)
+    G, coords = create_random_graph(args.num_cities, pattern="uniform", seed=args.seed)
     G, coords = add_start_node(G, coords, start_coords, start=start_node)
     
     # 准备算法参数
@@ -104,6 +122,18 @@ if __name__ == "__main__":
     results_dir = f"results_{timestamp}"
     os.makedirs(results_dir, exist_ok=True)
     
+    # 保存实验配置
+    config = {
+        "seed": args.seed,
+        "num_cities": args.num_cities,
+        "start_coords": start_coords,
+        "num_robots": num_robots,
+        "timestamp": timestamp
+    }
+    
+    with open(os.path.join(results_dir, "config.json"), "w") as f:
+        json.dump(config, f, indent=4)
+    
     # 保存结果到JSON
     results_dict = {}
     for name, routes, total, maximum, hist in results:
@@ -138,6 +168,12 @@ if __name__ == "__main__":
     plt.close()
     
     # 打印汇总结果
+    print("\n===== 实验配置 =====")
+    print(f"随机种子: {args.seed}")
+    print(f"城市数量: {args.num_cities}")
+    print(f"起始点坐标: {start_coords}")
+    print(f"机器人数量: {num_robots}")
+    
     print("\n===== 各算法路径汇总 =====")
     for name, _, total, maximum, _ in results:
         print(f"{name:15} Total path length：{total:.2f}，Maximum single-machine path：{maximum:.2f}")

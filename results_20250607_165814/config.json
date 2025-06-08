@@ -1,0 +1,10 @@
+{
+    "seed": 103,
+    "num_cities": 500,
+    "start_coords": [
+        50,
+        50
+    ],
+    "num_robots": 4,
+    "timestamp": "20250607_165814"
+}
